@@ -192,6 +192,10 @@ This deletes the resource group and all resources. **Do this as soon as the demo
     ├── script.md             # presenter talk track
     ├── connection-profiles.md# VSCode MSSQL connection how-to
     ├── copilot-prompts.md    # NL→SQL, inline, explain, fix-it
+    ├── sprocs/               # sample stored procedures (load after azd up)
+    │   ├── usp_TopCustomersByRevenue.sql
+    │   ├── usp_ProductsInCategory.sql
+    │   └── usp_CustomerOrderHistory.sql
     └── queries/
         ├── 01-browse.sql
         ├── 02-joins-aggregates.sql
