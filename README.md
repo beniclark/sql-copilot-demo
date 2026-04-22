@@ -98,10 +98,6 @@ To restore your own backup instead of / in addition to AdventureWorksLT:
             REPLACE;
    ```
 
-### Loading another Microsoft sample DB
-
-Same pattern as AdventureWorksLT. The full `AdventureWorks2022.bak` (not LT) and `WideWorldImporters-Full.bak` are available on the same [GitHub releases page](https://github.com/Microsoft/sql-server-samples/releases). Copy the `.bak` to the VM and `RESTORE DATABASE` as shown above.
-
 ### Using an existing SQL Server without azd
 
 If you already have a SQL Server (on-prem, Azure SQL VM you provisioned yourself, Azure SQL DB, etc.) and just want the demo *content* — AdventureWorksLT + the sample sprocs — you can skip `azd` entirely. Point the tools at your server instead.
