@@ -84,20 +84,6 @@ Get-ChildItem demo/sprocs/*.sql | ForEach-Object {
 
 Or in VSCode: open each `.sql` file, connect the tab to `AdventureWorksLT2022`, and press **Ctrl+Shift+E** to execute.
 
-### Loading a different `.bak` file
-
-To restore your own backup instead of / in addition to AdventureWorksLT:
-
-1. Upload the `.bak` to the VM (RDP + drag-and-drop, or Azure Storage + `azcopy` inside the VM).
-2. From VSCode (connected as `demoadmin`):
-   ```sql
-   RESTORE FILELISTONLY FROM DISK = 'C:\path\to\yourdb.bak';  -- see logical names
-   RESTORE DATABASE YourDb FROM DISK = 'C:\path\to\yourdb.bak'
-       WITH MOVE 'YourDb'      TO 'F:\data\YourDb.mdf',
-            MOVE 'YourDb_log'  TO 'G:\log\YourDb_log.ldf',
-            REPLACE;
-   ```
-
 ### Using an existing SQL Server without azd
 
 If you already have a SQL Server (on-prem, Azure SQL VM you provisioned yourself, Azure SQL DB, etc.) and just want the demo *content* — AdventureWorksLT + the sample sprocs — you can skip `azd` entirely. Point the tools at your server instead.
