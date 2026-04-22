@@ -1,0 +1,6 @@
+# ignore azd local state
+.azure/
+.vs/
+.vscode/
+*.env
+*.log
