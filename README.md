@@ -60,9 +60,73 @@ The `preprovision` hook detects your public IP, resolves your Entra UPN + object
 
 > **Demo attendees** — if you're cloning this repo to try the workflow against your **own** existing SQL Server (on-prem, local install, Azure SQL VM, Azure SQL DB, etc.), use **`scripts/load-demo-data.ps1`** to load the sample stored procedures. You do **not** need `azd` or the Azure VM from the Quick Start above — that path is only relevant if you want to provision the full demo environment from scratch.
 
-### Attendee path: load the sprocs into an existing server
+### Attendee path: bring your own SQL Server
 
-Prerequisite: you already have a database to target. If it's called `AdventureWorksLT2022` you can [restore the sample `.bak`](https://github.com/Microsoft/sql-server-samples/releases/tag/adventureworks) into your server first; otherwise any database you already have will work — the sprocs reference `SalesLT.*` tables, so pick a DB where those tables exist.
+You'll do two things: **(1) restore AdventureWorksLT2022 onto your server**, then **(2) load the sample stored procedures**. Steps below.
+
+#### Step 1 — Restore `AdventureWorksLT2022.bak` onto your server
+
+Download the sample backup from Microsoft's official release:
+
+**[AdventureWorksLT2022.bak](https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorksLT2022.bak)** (~7 MB) — part of the [sql-server-samples](https://github.com/Microsoft/sql-server-samples/releases/tag/adventureworks) repo.
+
+Then restore it. The right approach depends on the kind of server you have:
+
+<details open>
+<summary><b>SQL Server (on-prem, local install, Azure SQL VM, containers)</b></summary>
+
+The `.bak` must be on the **server's** filesystem, not the client's. Copy it to a path SQL can read (e.g. `C:\sqlbackups\` on Windows, `/var/opt/mssql/backup/` on Linux), then:
+
+```sql
+-- Adjust paths for your OS / install
+RESTORE FILELISTONLY FROM DISK = N'C:\sqlbackups\AdventureWorksLT2022.bak';  -- see logical names
+
+RESTORE DATABASE AdventureWorksLT2022
+    FROM DISK = N'C:\sqlbackups\AdventureWorksLT2022.bak'
+    WITH REPLACE, STATS = 10;
+```
+
+If SQL complains about the data/log paths in the `.bak`, add `MOVE` clauses using your server's data directory — for example `WITH MOVE 'AdventureWorksLT2022_Data' TO 'C:\SQLData\...'`.
+
+Or run it from PowerShell in one line:
+```powershell
+Invoke-Sqlcmd -ServerInstance <your-server> -Username <login> -TrustServerCertificate `
+    -Query "RESTORE DATABASE AdventureWorksLT2022 FROM DISK = N'C:\sqlbackups\AdventureWorksLT2022.bak' WITH REPLACE, STATS = 10" `
+    -QueryTimeout 600
+```
+
+</details>
+
+<details>
+<summary><b>Azure SQL Database (PaaS)</b></summary>
+
+Azure SQL DB does **not** support `RESTORE DATABASE FROM DISK`. Use one of these instead:
+
+- **[Azure Data Studio / SSMS: Deploy Database to Azure SQL Database wizard](https://learn.microsoft.com/azure/azure-sql/database/migrate-to-database-from-sql-server)** — points at a local `.bacpac` / `.bak`
+- **Import a `.bacpac`** via Azure Portal or `SqlPackage.exe`. Microsoft publishes an [AdventureWorksLT `.bacpac`](https://github.com/Microsoft/sql-server-samples/tree/master/samples/databases/adventure-works) you can import directly.
+- Portal → your SQL server → *Import database* → point at the `.bacpac` in a storage account.
+
+</details>
+
+<details>
+<summary><b>Just want to run the demo quickly? Use LocalDB or a Docker container</b></summary>
+
+**SQL Server in Docker** (fastest, works on Mac/Linux/Windows):
+```bash
+docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=YourStrong!Passw0rd" \
+    -p 1433:1433 --name mssql -d mcr.microsoft.com/mssql/server:2022-latest
+docker cp AdventureWorksLT2022.bak mssql:/var/opt/mssql/backup/
+docker exec -it mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C \
+    -Q "RESTORE DATABASE AdventureWorksLT2022 FROM DISK = '/var/opt/mssql/backup/AdventureWorksLT2022.bak' WITH MOVE 'AdventureWorksLT2022_Data' TO '/var/opt/mssql/data/AdventureWorksLT2022.mdf', MOVE 'AdventureWorksLT2022_Log' TO '/var/opt/mssql/data/AdventureWorksLT2022_log.ldf'"
+```
+
+Then connect VSCode to `localhost,1433` as `sa` with the password above.
+
+</details>
+
+Already have `AdventureWorksLT2022` (or any DB with a `SalesLT` schema)? Skip this step.
+
+#### Step 2 — Load the sample stored procedures
 
 ```powershell
 # Clone the repo
