@@ -56,6 +56,68 @@ The `preprovision` hook detects your public IP, resolves your Entra UPN + object
 4. Use [`demo/copilot-prompts.md`](demo/copilot-prompts.md) for the Copilot segment.
 5. Narrate from [`demo/script.md`](demo/script.md).
 
+## Loading data into the database
+
+### What's loaded automatically
+
+On first deploy, `scripts/bootstrap-sql.ps1` runs on the VM via `az vm run-command` and:
+
+1. Downloads `AdventureWorksLT2022.bak` from [Microsoft's sql-server-samples GitHub release](https://github.com/Microsoft/sql-server-samples/releases/tag/adventureworks).
+2. Restores it as `AdventureWorksLT2022`, relocating files to `F:\data\` (data) and `G:\log\` (log).
+3. Creates the `demoadmin` SQL login and grants it `sysadmin`.
+
+You get customers, products, orders, and categories out of the box — no further action needed to run the demo queries.
+
+### Adding the sample stored procedures
+
+The three demo stored procedures (`usp_TopCustomersByRevenue`, `usp_ProductsInCategory`, `usp_CustomerOrderHistory`) live in `demo/sprocs/`. After the VM is up, load them with one command from your laptop:
+
+```powershell
+$fqdn = azd env get-value SQL_VM_FQDN
+$pwd  = azd env get-value SQL_ADMIN_PASSWORD
+Get-ChildItem demo/sprocs/*.sql | ForEach-Object {
+    Invoke-Sqlcmd -ServerInstance $fqdn -Database AdventureWorksLT2022 `
+        -Username demoadmin -Password $pwd -TrustServerCertificate `
+        -InputFile $_.FullName
+}
+```
+
+Or in VSCode: open each `.sql` file, connect the tab to `AdventureWorksLT2022`, and press **Ctrl+Shift+E** to execute.
+
+### Loading a different `.bak` file
+
+To restore your own backup instead of / in addition to AdventureWorksLT:
+
+1. Upload the `.bak` to the VM (RDP + drag-and-drop, or Azure Storage + `azcopy` inside the VM).
+2. From VSCode (connected as `demoadmin`):
+   ```sql
+   RESTORE FILELISTONLY FROM DISK = 'C:\path\to\yourdb.bak';  -- see logical names
+   RESTORE DATABASE YourDb FROM DISK = 'C:\path\to\yourdb.bak'
+       WITH MOVE 'YourDb'      TO 'F:\data\YourDb.mdf',
+            MOVE 'YourDb_log'  TO 'G:\log\YourDb_log.ldf',
+            REPLACE;
+   ```
+
+### Importing CSV / flat files
+
+For ad-hoc data, use `bcp` (comes with SQL Server, already on the VM) or the MSSQL extension's **Import Wizard** (right-click a database in the Object Explorer → *Import Wizard*). Example from your laptop using `Invoke-Sqlcmd` and `Import-Csv`:
+
+```powershell
+$rows = Import-Csv .\mydata.csv
+# CREATE TABLE ... first, then:
+$rows | ForEach-Object {
+    $q = "INSERT INTO dbo.MyTable (Col1, Col2) VALUES ('$($_.Col1)', '$($_.Col2)')"
+    Invoke-Sqlcmd -ServerInstance $fqdn -Database AdventureWorksLT2022 `
+        -Username demoadmin -Password $pwd -TrustServerCertificate -Query $q
+}
+```
+
+For larger loads, use `bcp <db>.<schema>.<table> in data.csv -c -t, -S <fqdn> -U demoadmin -P <pwd>` — orders of magnitude faster.
+
+### Loading another Microsoft sample DB
+
+Same pattern as AdventureWorksLT. The full `AdventureWorks2022.bak` (not LT) and `WideWorldImporters-Full.bak` are available on the same [GitHub releases page](https://github.com/Microsoft/sql-server-samples/releases). Copy the `.bak` to the VM and `RESTORE DATABASE` as shown above.
+
 ## Retrieve connection details any time
 
 ```powershell
