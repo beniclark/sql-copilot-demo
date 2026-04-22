@@ -98,22 +98,6 @@ To restore your own backup instead of / in addition to AdventureWorksLT:
             REPLACE;
    ```
 
-### Importing CSV / flat files
-
-For ad-hoc data, use `bcp` (comes with SQL Server, already on the VM) or the MSSQL extension's **Import Wizard** (right-click a database in the Object Explorer → *Import Wizard*). Example from your laptop using `Invoke-Sqlcmd` and `Import-Csv`:
-
-```powershell
-$rows = Import-Csv .\mydata.csv
-# CREATE TABLE ... first, then:
-$rows | ForEach-Object {
-    $q = "INSERT INTO dbo.MyTable (Col1, Col2) VALUES ('$($_.Col1)', '$($_.Col2)')"
-    Invoke-Sqlcmd -ServerInstance $fqdn -Database AdventureWorksLT2022 `
-        -Username demoadmin -Password $pwd -TrustServerCertificate -Query $q
-}
-```
-
-For larger loads, use `bcp <db>.<schema>.<table> in data.csv -c -t, -S <fqdn> -U demoadmin -P <pwd>` — orders of magnitude faster.
-
 ### Loading another Microsoft sample DB
 
 Same pattern as AdventureWorksLT. The full `AdventureWorks2022.bak` (not LT) and `WideWorldImporters-Full.bak` are available on the same [GitHub releases page](https://github.com/Microsoft/sql-server-samples/releases). Copy the `.bak` to the VM and `RESTORE DATABASE` as shown above.
