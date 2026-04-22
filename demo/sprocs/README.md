@@ -12,19 +12,19 @@ All three use `CREATE OR ALTER`, so they're safe to run repeatedly.
 
 ## Load them
 
-From your laptop (after `azd up`):
+Easiest: use the loader script against any SQL Server you already have.
 
 ```powershell
-$fqdn = azd env get-value SQL_VM_FQDN
-$pwd  = azd env get-value SQL_ADMIN_PASSWORD
-Get-ChildItem demo/sprocs/*.sql | ForEach-Object {
-    Invoke-Sqlcmd -ServerInstance $fqdn -Database AdventureWorksLT2022 `
-        -Username demoadmin -Password $pwd -TrustServerCertificate `
-        -InputFile $_.FullName
-}
+# SQL auth (prompts for password)
+./scripts/load-demo-data.ps1 -ServerInstance <your-server-fqdn> -Username <login>
+
+# Integrated auth
+./scripts/load-demo-data.ps1 -ServerInstance localhost
 ```
 
-Or in VSCode: open each `.sql` file, connect the tab to `AdventureWorksLT2022`, press **Ctrl+Shift+E**.
+The script verifies the connection, checks the target DB exists, then runs every `.sql` file in this folder. See the top-level [README](../../README.md#loading-data-into-the-database) for more options.
+
+Or from VSCode: open each `.sql` file, connect the tab to your database, press **Ctrl+Shift+E**.
 
 ## Try them
 

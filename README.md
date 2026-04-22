@@ -58,79 +58,57 @@ The `preprovision` hook detects your public IP, resolves your Entra UPN + object
 
 ## Loading data into the database
 
-### What's loaded automatically
+> **Demo attendees** — if you're cloning this repo to try the workflow against your **own** existing SQL Server (on-prem, local install, Azure SQL VM, Azure SQL DB, etc.), use **`scripts/load-demo-data.ps1`** to load the sample stored procedures. You do **not** need `azd` or the Azure VM from the Quick Start above — that path is only relevant if you want to provision the full demo environment from scratch.
 
-On first deploy, `scripts/bootstrap-sql.ps1` runs on the VM via `az vm run-command` and:
+### Attendee path: load the sprocs into an existing server
+
+Prerequisite: you already have a database to target. If it's called `AdventureWorksLT2022` you can [restore the sample `.bak`](https://github.com/Microsoft/sql-server-samples/releases/tag/adventureworks) into your server first; otherwise any database you already have will work — the sprocs reference `SalesLT.*` tables, so pick a DB where those tables exist.
+
+```powershell
+# Clone the repo
+git clone https://github.com/beniclark/sql-copilot-demo.git
+cd sql-copilot-demo
+
+# SQL authentication (prompts for password)
+./scripts/load-demo-data.ps1 -ServerInstance <your-server-fqdn> -Username <login>
+
+# …or Windows / Entra integrated auth
+./scripts/load-demo-data.ps1 -ServerInstance localhost
+
+# …or Azure SQL DB
+./scripts/load-demo-data.ps1 `
+    -ServerInstance myserver.database.windows.net `
+    -Database AdventureWorksLT2022 `
+    -Username sqladmin
+```
+
+The script tests the connection, verifies the DB exists, then executes every file in [`demo/sprocs/`](demo/sprocs/). All three use `CREATE OR ALTER`, so it's safe to re-run. See `./scripts/load-demo-data.ps1 -?` for full help.
+
+Once it finishes, try:
+
+```sql
+EXEC SalesLT.usp_TopCustomersByRevenue @TopN = 5;
+EXEC SalesLT.usp_ProductsInCategory    @CategoryName = 'Road Bikes';
+EXEC SalesLT.usp_CustomerOrderHistory  @CustomerID = 29485;
+```
+
+### Presenter path: what `azd up` does for you
+
+If you ran the full `azd up` flow above (for a fresh Azure VM), `scripts/bootstrap-sql.ps1` runs automatically on the VM via `az vm run-command` and:
 
 1. Downloads `AdventureWorksLT2022.bak` from [Microsoft's sql-server-samples GitHub release](https://github.com/Microsoft/sql-server-samples/releases/tag/adventureworks).
-2. Restores it as `AdventureWorksLT2022`, relocating files to `F:\data\` (data) and `G:\log\` (log).
+2. Restores it as `AdventureWorksLT2022`, relocating files to `F:\data\` and `G:\log\`.
 3. Creates the `demoadmin` SQL login and grants it `sysadmin`.
 
-You get customers, products, orders, and categories out of the box — no further action needed to run the demo queries.
-
-### Adding the sample stored procedures
-
-The three demo stored procedures (`usp_TopCustomersByRevenue`, `usp_ProductsInCategory`, `usp_CustomerOrderHistory`) live in `demo/sprocs/`. After the VM is up, load them with one command from your laptop:
+It does **not** load the sample sprocs — run `scripts/load-demo-data.ps1` afterward to do that:
 
 ```powershell
 $fqdn = azd env get-value SQL_VM_FQDN
 $pwd  = azd env get-value SQL_ADMIN_PASSWORD
-Get-ChildItem demo/sprocs/*.sql | ForEach-Object {
-    Invoke-Sqlcmd -ServerInstance $fqdn -Database AdventureWorksLT2022 `
-        -Username demoadmin -Password $pwd -TrustServerCertificate `
-        -InputFile $_.FullName
-}
+./scripts/load-demo-data.ps1 -ServerInstance $fqdn -Username demoadmin -Password $pwd
 ```
 
-Or in VSCode: open each `.sql` file, connect the tab to `AdventureWorksLT2022`, and press **Ctrl+Shift+E** to execute.
-
-### Using an existing SQL Server without azd
-
-If you already have a SQL Server (on-prem, Azure SQL VM you provisioned yourself, Azure SQL DB, etc.) and just want the demo *content* — AdventureWorksLT + the sample sprocs — you can skip `azd` entirely. Point the tools at your server instead.
-
-**What you need (manually, in place of what `azd` + `preprovision` provide):**
-
-| `azd` workflow provides | Manual equivalent |
-|---|---|
-| `SQL_VM_FQDN` | Your server's FQDN or IP, e.g. `sql01.contoso.com` |
-| `SQL_ADMIN_LOGIN` / `SQL_ADMIN_PASSWORD` | Any login with `dbcreator` (to restore) or `db_owner` on an existing DB |
-| `ENTRA_ADMIN_UPN` | Only needed if you want Entra auth; otherwise omit |
-| `PRESENTER_IP` (NSG rule) | N/A — configure firewall on your own network |
-| `bootstrap-sql.ps1` running on the VM | Run the restore from your laptop instead |
-
-**Caveats about `scripts/bootstrap-sql.ps1` on a remote/existing server:**
-
-The script is hardcoded for in-VM execution and won't work unmodified against a remote server. Specifically:
-
-- It uses `ServerInstance = '.'` (local only) — you'd need `-ServerInstance <fqdn>` on every `Invoke-Sqlcmd` call.
-- It assumes data/log directories `F:\data\` and `G:\log\` exist — those paths likely don't exist on your server; you'd point `MOVE` clauses at your own paths.
-- The `RESTORE DATABASE ... FROM DISK` reads the `.bak` from a local path on the server. For a remote server you must first copy the `.bak` onto the server (or a network share it can read) — `RESTORE` cannot stream from a client.
-- `CREATE LOGIN ... FROM EXTERNAL PROVIDER` only works if the instance already has Entra authentication configured.
-
-**Recommended path for an existing server:** don't use `bootstrap-sql.ps1` at all. Just run this from your laptop:
-
-```powershell
-$server   = 'sql01.contoso.com'   # your server FQDN
-$user     = 'sa'                  # or any admin login
-$pwd      = Read-Host -AsSecureString 'SQL password' | ConvertFrom-SecureString -AsPlainText
-
-# 1. If restoring AdventureWorksLT2022: put the .bak somewhere the server can read.
-#    (Local path on the server, or a UNC share the SQL service account can access.)
-#    Then ask the server to restore from there:
-$bak = 'C:\sqlbackups\AdventureWorksLT2022.bak'   # path *on the server*
-Invoke-Sqlcmd -ServerInstance $server -Username $user -Password $pwd -TrustServerCertificate `
-    -Query "RESTORE DATABASE AdventureWorksLT2022 FROM DISK = N'$bak' WITH REPLACE, STATS = 10" `
-    -QueryTimeout 600
-
-# 2. Load the sample sprocs (works against any DB you already have too —
-#    just change -Database to your database name):
-Get-ChildItem demo/sprocs/*.sql | ForEach-Object {
-    Invoke-Sqlcmd -ServerInstance $server -Username $user -Password $pwd -TrustServerCertificate `
-        -Database AdventureWorksLT2022 -InputFile $_.FullName
-}
-```
-
-**If you want to reuse `bootstrap-sql.ps1` against a remote server**, you'd need to modify it: add a `-ServerInstance` parameter, add a `-SkipRestore` switch for the "existing DB" case, and replace `F:\data`/`G:\log` with parameters. Not required for this demo — the inline commands above are simpler.
+> `scripts/bootstrap-sql.ps1` is hardcoded for in-VM execution (local `ServerInstance`, `F:\data\`/`G:\log\` paths, local `.bak` path). It is **not** intended to be run against a remote or existing server — attendees should use `load-demo-data.ps1` instead.
 
 ## Retrieve connection details any time
 
@@ -173,7 +151,9 @@ This deletes the resource group and all resources. **Do this as soon as the demo
 ├── scripts/
 │   ├── preprovision.ps1      # detects IP, generates passwords, resolves Entra object ID
 │   ├── preprovision.sh       # same, for macOS/Linux presenters
-│   └── postprovision.ps1     # prints connection banner
+│   ├── postprovision.ps1     # prints connection banner
+│   ├── bootstrap-sql.ps1     # runs ON the Azure VM; restores AdventureWorksLT + creates demoadmin
+│   └── load-demo-data.ps1    # run from your laptop against any SQL Server to load sample sprocs
 └── demo/
     ├── script.md             # presenter talk track
     ├── connection-profiles.md# VSCode MSSQL connection how-to
